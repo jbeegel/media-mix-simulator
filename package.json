@@ -1,0 +1,25 @@
+{
+  "name": "media-mix-simulator",
+  "version": "0.1.0",
+  "description": "A small Monte Carlo planning model for splitting a monthly ad budget across channels, with low, mid and high bands for every funnel step.",
+  "license": "MIT",
+  "author": "Justin Beegel (https://nudgemeforward.com)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "example": "tsx examples/quick-start.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.12"
+  }
+}

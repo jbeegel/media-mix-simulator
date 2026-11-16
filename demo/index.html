@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media mix simulator</title>
+<meta name="description" content="A small Monte Carlo planning model for splitting a monthly ad budget across LinkedIn, Google Search and Meta.">
+<style>
+  :root {
+    color-scheme: light dark;
+    --navy: #051B35;
+    --blue: #00B4FC;
+    --green: #92CA1F;
+    --orange: #FC7313;
+    --bg: #F6F8FB;
+    --surface: #FFFFFF;
+    --text: #051B35;
+    --muted: #4A5B70;
+    --line: #D5DCE6;
+    --track: #E3E8EF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #051B35;
+      --surface: #0B2747;
+      --text: #F2F6FA;
+      --muted: #A9B8CA;
+      --line: #1F3D61;
+      --track: #16345A;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { width: 100%; margin: 0 auto; padding: 24px 16px 48px; }
+  @media (min-width: 900px) { main { width: 880px; padding-top: 40px; } }
+  h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); }
+  .notice {
+    border-left: 4px solid var(--orange);
+    background: var(--surface);
+    padding: 10px 14px;
+    margin: 16px 0 24px;
+    font-size: 0.95rem;
+  }
+  .grid { display: grid; gap: 16px; }
+  @media (min-width: 760px) { .grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+  section {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+  .field output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .field small { color: var(--muted); display: block; }
+  input[type="range"] { width: 100%; margin: 8px 0 2px; accent-color: var(--blue); height: 28px; }
+  input.c-google { accent-color: var(--green); }
+  input.c-meta { accent-color: var(--orange); }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  button {
+    font: inherit;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 14px;
+    min-height: 40px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--blue); }
+  button[aria-pressed="true"] { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+  .splitbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--track); margin: 4px 0 8px; }
+  .splitbar span { display: block; height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.9rem; color: var(--muted); margin: 0 0 16px; padding: 0; list-style: none; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  .chances { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .chance { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .chance b { display: block; font-size: 1.8rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .chance span { color: var(--muted); font-size: 0.9rem; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; color: var(--muted); font-size: 0.9rem; padding-bottom: 6px; }
+  th, td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  tbody th { font-weight: 600; }
+  td.mid { font-weight: 700; }
+  tr:last-child th, tr:last-child td { border-bottom: 0; }
+  .wrap th, .wrap td { white-space: normal; }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+  footer { color: var(--muted); font-size: 0.9rem; margin-top: 24px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Media mix simulator</h1>
+  <p class="lede">Split a monthly ad budget across three channels and see the range of outcomes a long sales cycle could produce. Each result is a band: the low end, the middle and the high end of 2,000 simulated runs.</p>
+  <p class="notice"><strong>Illustrative assumptions.</strong> The click prices, conversion rates and deal value on this page are invented planning ranges, listed at the bottom. They describe no real account. Replace them with your own before you rely on any number here.</p>
+
+  <div class="grid">
+    <section aria-labelledby="h-plan">
+      <h2 id="h-plan">The plan</h2>
+      <div class="field">
+        <label for="monthly">Monthly budget <output id="monthly-out" for="monthly"></output></label>
+        <input type="range" id="monthly" min="500" max="20000" step="250" value="3000">
+      </div>
+      <div class="field">
+        <label for="months">Months <output id="months-out" for="months"></output></label>
+        <input type="range" id="months" min="1" max="12" step="1" value="3">
+      </div>
+
+      <h2 id="h-split">The split</h2>
+      <div class="presets" role="group" aria-label="Example splits" id="presets"></div>
+      <div class="field">
+        <label for="s-linkedin">LinkedIn <output id="s-linkedin-out" for="s-linkedin"></output></label>
+        <input type="range" class="c-linkedin" id="s-linkedin" min="0" max="100" step="1" value="50" aria-describedby="split-help">
+      </div>
+      <div class="field">
+        <label for="s-google">Google Search <output id="s-google-out" for="s-google"></output></label>
+        <input type="range" class="c-google" id="s-google" min="0" max="100" step="1" value="30" aria-describedby="split-help">
+      </div>
+      <div class="field">
+        <label for="s-meta">Meta <output id="s-meta-out" for="s-meta"></output></label>
+        <input type="range" class="c-meta" id="s-meta" min="0" max="100" step="1" value="20" aria-describedby="split-help">
+        <small id="split-help">The three sliders are weights. The share and dollars beside each one are what it works out to.</small>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-result">
+      <h2 id="h-result">The result</h2>
+      <div aria-live="polite">
+        <p id="summary"></p>
+        <div class="splitbar" id="splitbar" role="img" aria-label="Budget share by channel"></div>
+        <ul class="legend" id="legend"></ul>
+        <div class="chances">
+          <div class="chance"><b id="chance-deal"></b><span>chance of at least one deal</span></div>
+          <div class="chance"><b id="chance-payback"></b><span>chance revenue covers spend</span></div>
+        </div>
+        <div class="scroll">
+          <table>
+            <caption>Over the whole period. Low is the 10th percentile of runs, mid the median, high the 90th.</caption>
+            <thead><tr><th scope="col">Step</th><th scope="col">Low</th><th scope="col">Mid</th><th scope="col">High</th></tr></thead>
+            <tbody id="bands"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section aria-labelledby="h-assume" style="margin-top:16px">
+    <h2 id="h-assume">Assumptions behind the numbers</h2>
+    <p class="lede">Every rate is a range. Each run draws a value from each range, most often near the middle.</p>
+    <div class="scroll">
+      <table class="wrap">
+        <caption>Channels</caption>
+        <thead><tr><th scope="col">Channel</th><th scope="col">Cost per click</th><th scope="col">Click to lead</th></tr></thead>
+        <tbody id="a-channels"></tbody>
+      </table>
+    </div>
+    <div class="scroll" style="margin-top:16px">
+      <table class="wrap">
+        <caption>Funnel after the lead</caption>
+        <thead><tr><th scope="col">Step</th><th scope="col">Range</th></tr></thead>
+        <tbody id="a-funnel"></tbody>
+      </table>
+    </div>
+    <details>
+      <summary>What this model leaves out</summary>
+      <p>It treats channels as independent and the funnel as the same for every channel. It has no limit on how much a channel can absorb, no learning period, no seasonality and no delay between a lead and a deal. The deal counts in the table are averages and can be fractions; the two chance figures use whole deals. A result is only as good as the ranges that went in.</p>
+    </details>
+  </section>
+
+  <footer>
+    <p>The model on this page is the same code as the <code>simulate</code> function in the repository, copied inline so the page has no dependencies. Built by Justin Beegel, <a href="https://nudgemeforward.com">NUDGE</a>.</p>
+  </footer>
+</main>
+
+<script>
+/* simulate:start */
+// A plain JavaScript copy of src/index.ts. A test in the repository checks
+// that this copy and the library return the same numbers.
+var DEFAULT_CHANNELS = [
+  { key: "linkedin", name: "LinkedIn", cpc: { low: 8, high: 18 }, leadRate: { low: 0.01, high: 0.04 } },
+  { key: "google", name: "Google Search", cpc: { low: 10, high: 40 }, leadRate: { low: 0.02, high: 0.06 } },
+  { key: "meta", name: "Meta", cpc: { low: 1, high: 4 }, leadRate: { low: 0.001, high: 0.006 } }
+];
+var DEFAULT_FUNNEL = {
+  leadToCall: { low: 0.3, high: 0.6 },
+  callToOpportunity: { low: 0.15, high: 0.35 },
+  opportunityToDeal: { low: 0.15, high: 0.35 },
+  dealValue: { low: 15000, high: 30000 }
+};
+var PRESETS = [
+  { key: "balanced", label: "Targeted first", split: { linkedin: 50, google: 30, meta: 20 } },
+  { key: "linkedin", label: "LinkedIn only", split: { linkedin: 100, google: 0, meta: 0 } },
+  { key: "search", label: "Search led", split: { linkedin: 20, google: 60, meta: 20 } },
+  { key: "even", label: "Even split", split: { linkedin: 34, google: 33, meta: 33 } }
+];
+function mulberry32(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) >>> 0;
+    var t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function draw(r, rnd) {
+  var u = (rnd() + rnd()) / 2;
+  return r.low + (r.high - r.low) * u;
+}
+function poisson(mean, rnd) {
+  var limit = Math.exp(-mean);
+  var k = 0;
+  var p = rnd();
+  while (p > limit && k < 50) {
+    k++;
+    p *= rnd();
+  }
+  return k;
+}
+function band(values) {
+  var s = values.slice().sort(function (a, b) { return a - b; });
+  var last = s.length - 1;
+  function at(p) {
+    var i = Math.floor(p * last);
+    return s[i < 0 ? 0 : Math.min(last, i)];
+  }
+  return { low: at(0.1), mid: at(0.5), high: at(0.9) };
+}
+function simulate(input) {
+  var monthly = input.monthly, months = input.months, split = input.split, channels = input.channels, funnel = input.funnel;
+  var runs = input.runs == null ? 2000 : input.runs;
+  var rnd = mulberry32(input.seed == null ? 20261115 : input.seed);
+  var weight = channels.reduce(function (n, c) { return n + (split[c.key] || 0); }, 0);
+  var total = weight > 1 ? weight : 1;
+  var spend = monthly * months;
+  var acc = { clicks: [], leads: [], calls: [], opportunities: [], deals: [], revenue: [], cpl: [] };
+  var per = {};
+  channels.forEach(function (c) { per[c.key] = { clicks: [], leads: [] }; });
+  var won = 0;
+  var paid = 0;
+  for (var i = 0; i < runs; i++) {
+    var clicks = 0;
+    var leads = 0;
+    for (var j = 0; j < channels.length; j++) {
+      var c = channels[j];
+      var budget = (spend * (split[c.key] || 0)) / total;
+      var k = budget / draw(c.cpc, rnd);
+      var l = k * draw(c.leadRate, rnd);
+      per[c.key].clicks.push(k);
+      per[c.key].leads.push(l);
+      clicks += k;
+      leads += l;
+    }
+    var calls = leads * draw(funnel.leadToCall, rnd);
+    var opportunities = calls * draw(funnel.callToOpportunity, rnd);
+    var deals = opportunities * draw(funnel.opportunityToDeal, rnd);
+    var revenue = deals * draw(funnel.dealValue, rnd);
+    acc.clicks.push(clicks);
+    acc.leads.push(leads);
+    acc.calls.push(calls);
+    acc.opportunities.push(opportunities);
+    acc.deals.push(deals);
+    acc.revenue.push(revenue);
+    acc.cpl.push(leads > 0 ? spend / leads : spend);
+    var whole = poisson(deals, rnd);
+    if (whole >= 1) won++;
+    if (whole * draw(funnel.dealValue, rnd) >= spend) paid++;
+  }
+  var perChannel = {};
+  channels.forEach(function (c) {
+    perChannel[c.key] = { spend: (spend * (split[c.key] || 0)) / total, clicks: band(per[c.key].clicks), leads: band(per[c.key].leads) };
+  });
+  return {
+    months: months,
+    spend: spend,
+    perChannel: perChannel,
+    clicks: band(acc.clicks),
+    leads: band(acc.leads),
+    calls: band(acc.calls),
+    opportunities: band(acc.opportunities),
+    deals: band(acc.deals),
+    revenue: band(acc.revenue),
+    costPerLead: band(acc.cpl),
+    chanceOfDeal: won / runs,
+    chanceOfPayback: paid / runs
+  };
+}
+/* simulate:end */
+
+(function () {
+  var COLORS = { linkedin: "var(--blue)", google: "var(--green)", meta: "var(--orange)" };
+  var $ = function (id) { return document.getElementById(id); };
+  var whole = function (n) { return Math.round(n).toLocaleString("en-US"); };
+  var money = function (n) { return "$" + whole(n); };
+  var small = function (n) { return n >= 100 ? whole(n) : n >= 10 ? n.toFixed(1) : n.toFixed(2); };
+  var pct = function (n) { return Math.round(n * 100) + "%"; };
+  var ratePct = function (n) { return (n * 100).toFixed(n < 0.01 ? 1 : 0) + "%"; };
+
+  function cell(tag, text, cls) {
+    var el = document.createElement(tag);
+    el.textContent = text;
+    if (cls) el.className = cls;
+    return el;
+  }
+  function row(label, cells) {
+    var tr = document.createElement("tr");
+    var th = cell("th", label);
+    th.scope = "row";
+    tr.appendChild(th);
+    cells.forEach(function (c) { tr.appendChild(c); });
+    return tr;
+  }
+
+  function readSplit() {
+    var split = {};
+    DEFAULT_CHANNELS.forEach(function (c) { split[c.key] = Number($("s-" + c.key).value); });
+    return split;
+  }
+
+  function render() {
+    var monthly = Number($("monthly").value);
+    var months = Number($("months").value);
+    var split = readSplit();
+    var r = simulate({ monthly: monthly, months: months, split: split, channels: DEFAULT_CHANNELS, funnel: DEFAULT_FUNNEL });
+
+    $("monthly-out").textContent = money(monthly);
+    $("months-out").textContent = String(months);
+    $("summary").textContent = money(r.spend) + " over " + months + (months === 1 ? " month." : " months.");
+
+    var bar = $("splitbar");
+    var legend = $("legend");
+    bar.textContent = "";
+    legend.textContent = "";
+    var parts = [];
+    DEFAULT_CHANNELS.forEach(function (c) {
+      var share = r.spend > 0 ? r.perChannel[c.key].spend / r.spend : 0;
+      $("s-" + c.key + "-out").textContent = pct(share) + " · " + money(r.perChannel[c.key].spend / months) + "/mo";
+      var seg = document.createElement("span");
+      seg.style.width = share * 100 + "%";
+      seg.style.background = COLORS[c.key];
+      bar.appendChild(seg);
+      var li = document.createElement("li");
+      var dot = document.createElement("i");
+      dot.style.background = COLORS[c.key];
+      li.appendChild(dot);
+      li.appendChild(document.createTextNode(c.name + " " + pct(share) + ", " + small(r.perChannel[c.key].leads.mid) + " leads (mid)"));
+      legend.appendChild(li);
+      parts.push(c.name + " " + pct(share));
+    });
+    bar.setAttribute("aria-label", "Budget share by channel: " + parts.join(", "));
+
+    $("chance-deal").textContent = pct(r.chanceOfDeal);
+    $("chance-payback").textContent = pct(r.chanceOfPayback);
+
+    var rows = [
+      ["Clicks", r.clicks, whole],
+      ["Leads", r.leads, small],
+      ["Calls", r.calls, small],
+      ["Opportunities", r.opportunities, small],
+      ["Deals", r.deals, small],
+      ["Revenue", r.revenue, money],
+      ["Cost per lead", r.costPerLead, money]
+    ];
+    var body = $("bands");
+    body.textContent = "";
+    rows.forEach(function (x) {
+      body.appendChild(row(x[0], [cell("td", x[2](x[1].low)), cell("td", x[2](x[1].mid), "mid"), cell("td", x[2](x[1].high))]));
+    });
+
+    var current = JSON.stringify(split);
+    Array.prototype.forEach.call($("presets").children, function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.split === current));
+    });
+  }
+
+  PRESETS.forEach(function (p) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = p.label;
+    b.dataset.split = JSON.stringify(p.split);
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () {
+      DEFAULT_CHANNELS.forEach(function (c) { $("s-" + c.key).value = p.split[c.key]; });
+      render();
+    });
+    $("presets").appendChild(b);
+  });
+
+  DEFAULT_CHANNELS.forEach(function (c) {
+    $("a-channels").appendChild(row(c.name, [
+      cell("td", "$" + c.cpc.low + " to $" + c.cpc.high),
+      cell("td", ratePct(c.leadRate.low) + " to " + ratePct(c.leadRate.high))
+    ]));
+  });
+  [
+    ["Lead to call", DEFAULT_FUNNEL.leadToCall, ratePct],
+    ["Call to opportunity", DEFAULT_FUNNEL.callToOpportunity, ratePct],
+    ["Opportunity to deal", DEFAULT_FUNNEL.opportunityToDeal, ratePct],
+    ["Revenue per deal", DEFAULT_FUNNEL.dealValue, money]
+  ].forEach(function (x) {
+    $("a-funnel").appendChild(row(x[0], [cell("td", x[2](x[1].low) + " to " + x[2](x[1].high))]));
+  });
+
+  ["monthly", "months", "s-linkedin", "s-google", "s-meta"].forEach(function (id) {
+    $(id).addEventListener("input", render);
+  });
+  render();
+})();
+</script>
+</body>
+</html>
