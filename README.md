@@ -1,5 +1,7 @@
 # media-mix-simulator
 
+[![CI](https://github.com/jbeegel/media-mix-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/jbeegel/media-mix-simulator/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A small Monte Carlo planning model for splitting a monthly ad budget across channels when the sale is slow and large, returning a low, mid and high band for every step from click to revenue.
 
 ## Who it is for
